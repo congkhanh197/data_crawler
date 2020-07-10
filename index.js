@@ -17,7 +17,6 @@ app.get("/", (req, res, next) => {
   sendResponse(res)(request);
 });
 
-// fetchHtmlFromUrl('https://batdongsan.com.vn/cho-thue-can-ho-chung-cu')
 
 const sendResponse = (res) => async (request) => {
   return await request
@@ -69,7 +68,7 @@ fetchDetailProperty = async (url) => {
       //   .then(function (value) {
       //     // data.coordinate = value;
       //   });
-      await driver.getPageSource().then((source) => {
+      await driver.getPageSource().then( async (source) => {
         let $ = cheerio.load(source);
         const data = {};
         data.id = $(
@@ -118,7 +117,12 @@ fetchDetailProperty = async (url) => {
         data.description = $(
           "#product-detail > div.pm-content > div.pm-desc"
         ).text();
-        data.coordinate = queryString.parse($("#maputility > iframe").attr("src"))['https://www.google.com/maps/embed/v1/place?q'];
+        const coordinate = queryString.parse($("#maputility > iframe").attr("src"))['https://www.google.com/maps/embed/v1/place?q'].split(',');
+        const location = (await axios.get(`https://nominatim.openstreetmap.org/reverse?format=geojson&lat=${coordinate[0]}&lon=${coordinate[1]}`)).data.features[0]
+
+        data.location = location.geometry
+        data.address_geocode = location.display_name
+        data.address_geocode_abc = location.address
         console.log(JSON.stringify(data, null, 2));
         return data;
       });
