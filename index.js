@@ -3,7 +3,14 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 var webdriver = require("selenium-webdriver");
 const chrome = require("selenium-webdriver/chrome");
-const queryString = require('query-string');
+const queryString = require("query-string");
+const Database = require("./database");
+
+const mongoose = require("mongoose");
+mongoose.connect(
+  "mongodb+srv://khanh:N2XedfpAnsdojbfu@real-estate-clusters-acson.mongodb.net/test",
+  { useNewUrlParser: true, useUnifiedTopology: true }
+);
 
 const baseUrl = "https://batdongsan.com.vn/cho-thue-can-ho-chung-cu";
 const app = express();
@@ -16,7 +23,6 @@ app.get("/", (req, res, next) => {
   );
   sendResponse(res)(request);
 });
-
 
 const sendResponse = (res) => async (request) => {
   return await request
@@ -62,15 +68,10 @@ fetchDetailProperty = async (url) => {
       await driver
         .findElement(webdriver.By.xpath('//*[@id="liMap"]/a'))
         .click();
-      // await driver
-      //   .findElement(webdriver.By.xpath('//*[@id="maputility"]/iframe'))
-      //   .getAttribute("src")
-      //   .then(function (value) {
-      //     // data.coordinate = value;
-      //   });
-      await driver.getPageSource().then( async (source) => {
+      await driver.getPageSource().then(async (source) => {
         let $ = cheerio.load(source);
         const data = {};
+        data.link = baseUrl + url;
         data.id = $(
           "#product-detail > div.prd-more-info > div:nth-child(1) > div"
         )
@@ -79,12 +80,23 @@ fetchDetailProperty = async (url) => {
         if (data.id == "") {
           console.log(response.config.url);
         }
-        data.post_date = $(
-          "#product-detail > div.prd-more-info > div:nth-child(3)"
-        )
-          .text()
-          .slice(11)
-          .replace(/(\r\n|\n|\r)/gm, "");
+        const date =
+          $("#product-detail > div.prd-more-info > div:nth-child(3)")
+            .text()
+            .slice(11)
+            .replace(/(\r\n|\n|\r)/gm, "")
+            .split("-")
+            .reverse()
+            .join("-") +
+          `T${Math.floor(Math.random() * 23)
+            .toString()
+            .padStart(2, "0")}:${Math.floor(Math.random() * 59)
+            .toString()
+            .padStart(2, "0")}:${Math.floor(Math.random() * 59)
+            .toString()
+            .padStart(2, "0")}`;
+        console.log("Date", date);
+        data.post_date = new Date(date).toISOString();
         data.address = $("#product-other-detail > div:nth-child(2) > div.right")
           .text()
           .replace(/(\r\n|\n|\r)/gm, "");
@@ -99,14 +111,19 @@ fetchDetailProperty = async (url) => {
           .replace(/(\r\n|\n|\r)/gm, "");
         data.connect_phone = $(
           "#LeftMainContent__productDetail_contactMobile > div.right.contact-phone > span"
-        ).attr('raw')
+        )
+          .attr("raw")
           .replace(/(\r\n|\n|\r)/gm, "");
-        data.connect_mail = $(
-          "#contactEmail > div.right.contact-email"
-        ).text().split('\n')[1];
-        data.price_rent = $(
+        data.connect_mail = $("#contactEmail > div.right.contact-email")
+          .text()
+          .split("\n")[1];
+        data.price = $(
           "#product-detail > div.kqchitiet > span:nth-child(2) > span.gia-title.mar-right-15 > strong"
         )
+          .text()
+          .replace(/(\r\n|\n|\r)/gm, "");
+
+        data.title = $("#product-detail > div.pm-title > h1")
           .text()
           .replace(/(\r\n|\n|\r)/gm, "");
         data.area_cal = $(
@@ -114,15 +131,27 @@ fetchDetailProperty = async (url) => {
         )
           .text()
           .replace(/(\r\n|\n|\r)/gm, "");
-        data.description = $(
+        const content = $(
           "#product-detail > div.pm-content > div.pm-desc"
         ).text();
-        const coordinate = queryString.parse($("#maputility > iframe").attr("src"))['https://www.google.com/maps/embed/v1/place?q'].split(',');
-        const location = (await axios.get(`https://nominatim.openstreetmap.org/reverse?format=geojson&lat=${coordinate[0]}&lon=${coordinate[1]}`)).data.features[0]
+        data.content = content.slice(1, des.length - 2);
 
-        data.location = location.geometry
-        data.address_geocode = location.display_name
-        data.address_geocode_abc = location.address
+        const coordinate = queryString
+          .parse($("#maputility > iframe").attr("src"))
+          ["https://www.google.com/maps/embed/v1/place?q"].split(",");
+        const location = (
+          await axios.get(
+            `https://nominatim.openstreetmap.org/reverse?format=geojson&lat=${coordinate[0]}&lon=${coordinate[1]}`
+          )
+        ).data.features[0];
+
+        data.location = location.geometry;
+        data.address_geocode = location.properties.display_name;
+        data.address_geocode_obj = location.properties.address;
+        data.realeastate_type = "APARTMENT";
+        // data.address_district = change_alias(location.properties.address.town.split(' ').slice(1).join('_').toUpperCase())
+        data.address_street = location.properties.address.road;
+        data.price = 1234;
         console.log(JSON.stringify(data, null, 2));
         return data;
       });
@@ -134,50 +163,24 @@ fetchDetailProperty = async (url) => {
     });
 };
 
-const data = {
-  _id: "5ee8868dce0aae732e79bf73",
-  id: 366148,
-  page_source: 3,
-  link:
-    "https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-duong-ly-thai-to-phuong-10-6/q-10-cc-vong-xoay-full-tien-nghi-tim-nguoishare-1tr2-thang-pr24074890",
-  title:
-    "Q. 10, CC vòng xoay Lý Thái Tổ, full tiện nghi, tìm người share phòng: 1tr2/tháng",
-  content:
-    "Chào bạn và cảm ơn bạn đã dành thời gian!\nMình có nhà chung cư 90 m2 rộng rãi thoáng mát, trong nhà mình có phòng cần người ở ghép cùng để share tiền phòngcó cả phòng Nam và phòng Nữ!\nNhà mình sau:\nNội thất trong nhà: Máy lạnh, tủ lạnh, máy giặt, bàn ăn, giường, bếp gas,..\nGửi xe: Có tầng hầm gửi xe.\nBạn có thể tham khảo thêm hình ảnh nhà mình qua:\nhttps://photos.app.goo.gl/Mnp9RVMWLstyxNJi8\nĐiện và nước đều theo giá nhà nước (nên bạn có thể yên tâm vì rẻ hơn phòng bên ngoài).\nKhu vực: Do là gần trung tâm thành phố nên có nhiều tuyến xe bus thuận tiện cho việc đi lại.\nVề phần mình: Vui vẻ, dễ gần, gọn gàng, sạch sẽ, nếu cần biết thêm thông tin hãy chủ động liên hệ, trên này nói không hết và cũng không tiện lắm!\nVài chú ý nhỏ gửi bạn:\nTrong sinh hoạt, chưa tốt chỗ nào mong nhận được góp ý cùng cải thiện ngày một tốt hơn.\nVới bạn mình mong muốn: Giấy tờ đầy đủ, gọn gàng, có ý thức vệ sinh riêng và chung, tiền bạc rõ ràng, thân thiện.\nLiên hệ mình: 089.663.36.84.\nNếu mình ko nghe máy được, bạn nhắn tin dùm nhé,, mình sẽ liên hệ ngay khi có thể!\nCảm ơn bạn đã dành thời gian! ",
-  address_street: "Lý Thái Tổ",
-  address_ward: "10",
-  surrounding: "CC, vòng xoay, tuyến xe bus",
-  surrounding_name: "vòng xoay Lý Thái Tổ",
-  surrounding_character: "thuận tiện cho việc đi lại",
-  interior_room: "",
-  project: "",
-  address_city: 1,
-  address_district: 11,
-  transaction_type: 2,
-  realestate_type: 3,
-  price_sell: 0,
-  price_rent: 1200000,
-  legal: 2,
-  floor: 1,
-  position_street: 6,
-  potential: "{2}",
-  area_origin: "{0,0}",
-  address_num: null,
-  lat: 10.76818324,
-  long: 106.6715892,
-  coordinate: "(106.67158915152595,10.768183241467774)",
-  price_m2: 13333.33333,
-  orientation: "",
-  area_cal: 90,
-  post_id: 24074890,
-  post_date: 1579021200,
-  crawled_date: 1579072955,
-  create_at: "49:25.1",
-  location: {
-    type: "Point",
-    coordinates: [106.67158915152595, 10.768183241467774],
-  },
-};
 formatText = (text) => text.replace(/(\r\n|\n|\r)/gm, "");
 
-fetchHtmlFromUrl("https://batdongsan.com.vn/cho-thue-can-ho-chung-cu");
+function change_alias(str) {
+  str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a");
+  str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e");
+  str = str.replace(/ì|í|ị|ỉ|ĩ/g, "i");
+  str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o");
+  str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u");
+  str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y");
+  str = str.replace(/đ/g, "d");
+  str = str.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, "A");
+  str = str.replace(/È|É|Ẹ|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, "E");
+  str = str.replace(/Ì|Í|Ị|Ỉ|Ĩ/g, "I");
+  str = str.replace(/Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, "O");
+  str = str.replace(/Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, "U");
+  str = str.replace(/Ỳ|Ý|Ỵ|Ỷ|Ỹ/g, "Y");
+  str = str.replace(/Đ/g, "D");
+  return str;
+}
+
+// fetchHtmlFromUrl("https://batdongsan.com.vn/cho-thue-can-ho-chung-cu-quan-1");
